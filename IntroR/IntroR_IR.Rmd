@@ -1,0 +1,239 @@
+---
+title: "Accelerate Your Workflow: Introduction to R"
+author: "Thomas Sharpe, Senior Data Scientist - Idaho State University"
+date: "14 June 2024"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, eval = TRUE)
+```
+
+# Challenge and Oppurtunity
+
+Increasing demand for data coupled with flat or perhaps strained budgets
+
+Chance to add a ton of value in the middle to long-term through acceleration of processes
+
+R is a great option to achieve this!
+
+# My Experience
+
+* Consulting/Market Research (Two Years)
+  + Junior Analyst Intern
+  + Senior Project Manager
+* College of Southern Idaho (~Seven Years)
+  + Research Analyst
+  + Senior Research Analyst
+  + Director of Analytics and Institutional Research
+* Idaho State University (Current)
+  + Associate Director of Institutional Research
+  + Senior Data Scientist (Current)
+  
+  
+# Objective
+
+Brief introduction to core R functionality such as:
+
+* Base R
+* Reading data
+* Wrangling Data
+* Summarizing Data
+* Visualizing data
+* Recap with an example, preparing to manually entering IPEDS Financial Aid. (If time)
+
+# Base R
+
+## Calculator
+
+CTRL+ALT+I: R Code Chunk Shortcut
+
+```{r}
+
+#Comments
+#CTRL+Enter to run an individual line of code
+#CTRL+SHIFT+ENTER to run entire code chunk
+2+2
+2*100
+
+```
+
+## Variables
+
+```{r}
+
+#Both work
+x <- 4
+x = 5
+
+x*3
+#X*3 #R is case sensitive!
+
+
+```
+
+## Accessing your files
+
+```{r}
+
+#Your active working directory within your file system on your machine.
+getwd()
+#setwd() #if you would like to change it
+
+dRetain <- read.csv('Retention.csv')
+rm(dRetain)
+
+#Default copy/paste: C:\Users\Thomas Sharpe\Desktop\AIHEC_IR24\IntroR
+#\ is an escape character so you either need to switch it to / or \\ 
+dRetain <- read.csv('C:\\Users\\Thomas Sharpe\\Desktop\\AIHEC_IR24\\IntroR\\Retention.csv')
+dFAFSA <- read.csv('C:\\Users\\Thomas Sharpe\\Desktop\\AIHEC_IR24\\IntroR\\FAFSA.csv')
+
+```
+
+# Exploring Data
+
+## Base R
+
+```{r}
+
+length(dRetain$STUDENT_ID)
+
+length(unique(dRetain$FISCAL_YEAR))
+
+dRetain$RETAIN_CODE <- ifelse(dRetain$RETAINED == 'Y',1,0)
+
+sum(dRetain$RETAIN_CODE)
+
+sum(dRetain$RETAIN_CODE) / length(dRetain$STUDENT_ID)
+
+#dRetain
+
+```
+
+## Packages (The Good Stuff!)
+
+How had female retention rate changes over-time?
+
+```{r}
+
+#install.packages('dplyr')
+library(dplyr)
+
+retainSummary <-
+  dRetain %>%
+  filter(SEX_CODE=='F') %>%
+  group_by(FISCAL_YEAR) %>%
+  summarise(students = n_distinct(STUDENT_ID),
+            retained = n_distinct(STUDENT_ID[RETAINED == 'Y'])) %>%
+  mutate(retainPercent = retained / students)  %>%
+  arrange(desc(FISCAL_YEAR))
+
+
+retainSummary
+
+```
+
+## Joining Data
+
+How has retention varied by first generation status?
+
+```{r}
+
+
+dRetainFull <- left_join(dRetain,dFAFSA, by = 'STUDENT_ID')
+dRetainFull <- left_join(dRetain,dFAFSA, by = c('STUDENT_ID','FISCAL_YEAR'))
+
+length(dRetainFull$STUDENT_ID[is.na(dRetainFull$FIRST_GEN)])
+
+
+```
+
+
+# Visualizing Data
+
+How has retention varied by first generation status (Continued)
+
+```{r}
+
+#I typically put the loading of packages all near the top of the document so I can use it throughout. Have it here to illustrate what packages I am using.
+library(ggplot2)
+library(scales)
+
+dPlotOverall <-
+  dRetainFull %>%
+  group_by(FISCAL_YEAR) %>%
+  summarise(students = n_distinct(STUDENT_ID), retained = n_distinct(STUDENT_ID[RETAINED == 'Y'])) %>%
+  mutate(pRetain = retained / students)
+
+pOverall <-
+  ggplot(data = dPlotOverall,aes(x = FISCAL_YEAR, y = pRetain)) +
+  geom_line(group = 1, color = rgb(244, 121, 32, maxColorValue = 255), linewidth = 1.2) +
+  geom_point(size = 2) +
+  geom_text(aes(label = paste(percent(pRetain,accuracy = .1),'\n(', retained,' of ',comma(students),')', sep = '')),vjust = -.3) +
+  scale_y_continuous(limits = c(0,1), labels = percent_format()) +
+  labs(title = 'Fall-to-Fall Retention by Year', x = '', y = 'Percent Retained') +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12))
+  
+
+pOverall
+
+```
+
+```{r, fig.height=8}
+
+dPlotOverall <-
+  dRetainFull %>%
+  filter(is.na(FIRST_GEN) == FALSE) %>%
+  group_by(FISCAL_YEAR, FIRST_GEN) %>%
+  summarise(students = n_distinct(STUDENT_ID), retained = n_distinct(STUDENT_ID[RETAINED == 'Y'])) %>%
+  mutate(pRetain = retained / students) %>%
+  mutate(FIRST_GEN_DESC = ifelse(FIRST_GEN == 'Y','First Gen','Not First Gen'))
+
+
+
+pFirstGen <-
+  ggplot(data = dPlotOverall,aes(x = FISCAL_YEAR, y = pRetain)) +
+  geom_col(fill = rgb(244, 121, 32, maxColorValue = 255), linewidth = 1.2) +
+  geom_text(aes(label = paste(percent(pRetain,accuracy = .1),'\n(', retained,' of ',comma(students),')', sep = '')),vjust = -.3) +
+  scale_y_continuous(limits = c(0,1), labels = percent_format()) +
+  labs(title = 'Fall-to-Fall Retention by Year', x = '', y = 'Percent Retained') +
+  theme_bw() +
+  theme(axis.text = element_text(size = 12)) +
+  facet_wrap(~FIRST_GEN_DESC, nrow = 2, ncol = 1)
+
+pFirstGen
+
+
+```
+
+
+# Statistics
+
+Probably wont have time to cover during the session. Brief example of regression analysis below though.
+
+```{r}
+
+dModel <-
+  dRetainFull %>%
+  filter(is.na(FIRST_GEN) == FALSE & is.na(PELL_ELIGIBLE) == FALSE)
+
+#Linear Regression
+mRetentionLinear <- lm(data = dModel, RETAIN_CODE ~ HS_GPA + SEX_CODE + IPEDS_RACE_CODE + FIRST_GEN + PELL_ELIGIBLE)
+
+summary(mRetentionLinear)
+
+#Logistic Regression
+mRetentionLogistic <- glm(data = dModel, RETAIN_CODE ~ HS_GPA + SEX_CODE + IPEDS_RACE_CODE + FIRST_GEN + PELL_ELIGIBLE, family = "binomial")
+summary(mRetentionLogistic)
+
+
+```
+
+
+
+
